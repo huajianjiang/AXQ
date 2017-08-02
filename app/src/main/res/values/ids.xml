@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="toolbar" type="id"/>
+    <item name="title" type="id"/>
+    <item name="login_check" type="id"/>
+
+    <item name="comment_type" type="id"/>
+    <item name="reply_to_type" type="id"/>
+    <item name="comment_pos" type="id"/>
+    <item name="reply_pos" type="id"/>
+
+    <item name="one" type="id"/>
+    <item name="decor" type="id"/>
+</resources>

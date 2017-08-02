@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    android:id="@+id/itemView"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_ripple"
+    android:clickable="true"
+    android:orientation="vertical"
+    android:paddingBottom="@dimen/vertical_spacing_lv_3"
+    android:paddingLeft="@dimen/horizontal_spacing_lv_2"
+    android:paddingRight="@dimen/horizontal_spacing_lv_2"
+    android:paddingTop="@dimen/vertical_spacing_lv_3">
+
+    <TextView
+        android:id="@+id/name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        tools:text="AAA"/>
+
+    <TextView
+        android:id="@+id/mac"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/vertical_spacing_lv_4"
+        tools:text="00:00:00:00:00"/>
+
+</LinearLayout>
