@@ -11,6 +11,7 @@
 
         <item name="android:windowBackground">@color/app_background</item>
         <item name="android:textViewStyle">@style/AppTextView</item>
+        <item name="android:editTextStyle">@style/AppEditTextStyle</item>
         <item name="colorControlHighlight">@color/colorControlHighlight</item>
 
     </style>
@@ -24,6 +25,9 @@
         <item name="android:textColor">@color/textColorPrimary</item>
         <item name="android:lineSpacingMultiplier">1.2</item>
         <item name="android:textColorSecondary">@color/textColorSecondary</item>
+    </style>
+
+    <style name="AppEditTextStyle" parent="AppTextView">
     </style>
 
     <style name="AppToolbarTitle" parent="TextAppearance.Widget.AppCompat.Toolbar.Title">

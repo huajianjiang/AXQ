@@ -8,6 +8,8 @@
     <string name="LinearLayoutManager">LinearLayoutManager</string>
     <string name="GridLayoutManager">GridLayoutManager</string>
 
+    <string name="ble_console">Ble Console</string>
+
     <string name="loading">页面加载中,请稍后…</string>
     <string name="error_loading">(￣_￣|||) どよ～ん</string>
 

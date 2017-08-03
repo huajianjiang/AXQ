@@ -22,6 +22,7 @@ import android.util.Log;
 import com.biu.axq.BuildConfig;
 import com.biu.axq.util.Logger;
 import com.biu.axq.util.Utils;
+import com.github.huajianjiang.baserecyclerview.util.Predications;
 
 import java.util.List;
 import java.util.UUID;
@@ -42,6 +43,10 @@ public class BleService extends Service {
     private static final int STATE_CONNECTING = 1;
     private static final int STATE_CONNECTED = 2;
 
+    public static final int READ = 0;
+    public static final int WRITE = 1;
+    public static final int NOTIFY = 2;
+
     public final static String ACTION_GATT_CONNECTED =
             BuildConfig.APPLICATION_ID + ".ACTION_GATT_CONNECTED";
     public final static String ACTION_GATT_DISCONNECTED =
@@ -51,6 +56,7 @@ public class BleService extends Service {
     public final static String ACTION_DATA_AVAILABLE =
             BuildConfig.APPLICATION_ID + ".ACTION_DATA_AVAILABLE";
     public final static String EXTRA_DATA = BuildConfig.APPLICATION_ID + ".EXTRA_DATA";
+    public final static String EXTRA_EVENT_TYPE = BuildConfig.APPLICATION_ID + ".EXTRA_EVENT_TYPE";
 
     private BluetoothManager mBleManager;
     private BluetoothAdapter mBleAdapter;
@@ -114,7 +120,8 @@ public class BleService extends Service {
         {
             Logger.e(TAG, "onCharacteristicRead");
             if (status == BluetoothGatt.GATT_SUCCESS) {
-                broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
+                Logger.i(TAG, "onCharacteristicRead Successful");
+                broadcastUpdate(ACTION_DATA_AVAILABLE, READ ,characteristic);
             }
         }
 
@@ -125,8 +132,9 @@ public class BleService extends Service {
             Logger.e(TAG, "onCharacteristicWrite");
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Logger.i(TAG, "onCharacteristicWrite Successful");
+                broadcastUpdate(ACTION_DATA_AVAILABLE, WRITE,characteristic);
             } else {
-                Logger.w(TAG, "onServicesDiscovered received: " + status);
+                Logger.w(TAG, "onCharacteristicWrite received: " + status);
             }
         }
 
@@ -135,7 +143,7 @@ public class BleService extends Service {
                 BluetoothGattCharacteristic characteristic)
         {
             Logger.e(TAG, "onCharacteristicChanged");
-            broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic);
+            broadcastUpdate(ACTION_DATA_AVAILABLE, NOTIFY, characteristic);
         }
     };
 
@@ -145,12 +153,14 @@ public class BleService extends Service {
         sendBroadcast(intent);
     }
 
-    private void broadcastUpdate(final String action,
+    private void broadcastUpdate(final String action, int type,
             final BluetoothGattCharacteristic characteristic)
     {
         final Intent intent = new Intent(action);
         String extra = Utils.bytesToHexString(characteristic.getValue());
         intent.putExtra(EXTRA_DATA, extra);
+        intent.putExtra(EXTRA_EVENT_TYPE, type);
+        Logger.e(TAG, "response = >" + extra);
         sendBroadcast(intent);
     }
 
@@ -213,7 +223,8 @@ public class BleService extends Service {
         mBleGatt.disconnect();
     }
 
-    public boolean readCharacteristic(BluetoothGattCharacteristic characteristic) {
+    public boolean readCharacteristic(BluetoothGattCharacteristic characteristic)
+    {
         if (mBleAdapter == null || mBleGatt == null) {
             Logger.w(TAG, "BluetoothAdapter not initialized");
             return false;
@@ -234,6 +245,8 @@ public class BleService extends Service {
 
         boolean successful = characteristic.setValue(value);
         if (successful) {
+            Logger.e(TAG, "writeCharacteristic>>>> loacal successful ");
+            characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
             successful = mBleGatt.writeCharacteristic(characteristic);
         }
 
@@ -258,10 +271,12 @@ public class BleService extends Service {
                           Utils.bytesToHexString(descriptor.getValue()));
         }
 
-        BluetoothGattDescriptor descriptor =
-                characteristic.getDescriptor(UUID.fromString(CLIENT_CHARACTERISTIC_CONFIG));
-        descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-        mBleGatt.writeDescriptor(descriptor);
+        if (enabled) {
+            BluetoothGattDescriptor descriptor =
+                    characteristic.getDescriptor(UUID.fromString(CLIENT_CHARACTERISTIC_CONFIG));
+            descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+            mBleGatt.writeDescriptor(descriptor);
+        }
     }
 
     public List<BluetoothGattService> getSupportedGattServices() {

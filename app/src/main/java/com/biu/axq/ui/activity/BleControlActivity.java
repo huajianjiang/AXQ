@@ -1,7 +1,10 @@
 package com.biu.axq.ui.activity;
 
+import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 
+import com.biu.axq.R;
 import com.biu.axq.ui.fragment.BleControlFragment;
 
 /**
@@ -10,6 +13,13 @@ import com.biu.axq.ui.fragment.BleControlFragment;
  * <br>Email: developer.huajianjiang@gmail.com
  */
 public class BleControlActivity extends AppActivity {
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setTitle(R.string.ble_console);
+        setBackNaviAction();
+    }
 
     @Override
     protected Fragment onCreateFragment() {

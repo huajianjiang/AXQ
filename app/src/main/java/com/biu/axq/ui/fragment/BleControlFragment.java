@@ -12,19 +12,23 @@ import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.support.annotation.Nullable;
-import android.support.v4.widget.TextViewCompat;
-import android.text.Editable;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.CompoundButton;
+import android.widget.Switch;
 import android.widget.TextView;
 
-import com.biu.axq.BuildConfig;
 import com.biu.axq.R;
 import com.biu.axq.service.BleService;
 import com.biu.axq.util.Constants;
 import com.biu.axq.util.Logger;
 import com.biu.axq.util.Msgs;
+import com.biu.axq.util.Utils;
 import com.biu.axq.util.Views;
 
 import java.util.List;
@@ -38,18 +42,20 @@ import static android.content.Context.BIND_AUTO_CREATE;
  */
 public class BleControlFragment extends AppFragment {
     private static final String TAG = BleControlFragment.class.getSimpleName();
-
     private TextView mOutput;
     private TextView mInput;
-    private TextView mWrite;
 
     private BleService mService;
     private BluetoothDevice mDevice;
+    private BluetoothGattCharacteristic mRWNCharacteristic;
+
+    private boolean mNotify = true;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
+
         mDevice = getArguments().getParcelable(Constants.KEY_ENTITY);
 
         Intent gattServiceIntent = new Intent(getContext(), BleService.class);
@@ -67,18 +73,53 @@ public class BleControlFragment extends AppFragment {
     public void onInitView(View root) {
         mInput = Views.find(root, R.id.et_input);
         mOutput = Views.find(root, R.id.tv_output);
-        mWrite = Views.find(root, R.id.tv_write);
+        Views.find(root, R.id.tv_write).setOnClickListener(this);
+    }
 
+    @Override
+    public void onClick(View v) {
+        super.onClick(v);
+        switch (v.getId()) {
+            case R.id.tv_write:
+                writeCharacteristic();
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    private void writeCharacteristic() {
+        String command = mInput.getText().toString().trim();
+        if (TextUtils.isEmpty(command)) {
+            Msgs.shortToast(getContext(), "请先输入 HEX 指令");
+            return;
+        }
+
+        if (mService != null && mRWNCharacteristic != null) {
+
+            //先禁用通知，防止返回的数据混乱写入命令后的返回的结果
+            mService.setCharacteristicNotification(mRWNCharacteristic, false);
+
+            //发送 HEX 指令，异步的写入成功回调后立刻读取
+            byte[] value = Utils.hexStringToBytes(command);
+            if (value != null) {
+                if (!mService.writeCharacteristic(mRWNCharacteristic, value)) {
+                    Msgs.shortToast(getContext(), "写入初始化错误");
+                    if (mNotify) {
+                        mService.setCharacteristicNotification(mRWNCharacteristic, true);
+                    }
+                }
+            } else {
+                Msgs.shortToast(getContext(), "输入格式错误，请输入 HEX 命令格式");
+            }
+        }
     }
 
     @Override
     public void onResume() {
         super.onResume();
         getContext().registerReceiver(mGattUpdateReceiver, makeGattUpdateIntentFilter());
-        if (mService != null) {
-            Logger.e(TAG, "connect");
-            mService.connect(mDevice.getAddress());
-        }
     }
 
     @Override
@@ -92,6 +133,51 @@ public class BleControlFragment extends AppFragment {
         super.onDestroy();
         getContext().unbindService(mServiceConnection);
         mService = null;
+    }
+
+
+    @Override
+    public void onPrepareOptionsMenu(Menu menu) {
+        View notifyRoot =
+                getActivity().getLayoutInflater().inflate(R.layout.menu_ble_control, null);
+        final Switch notifySwitch = Views.find(notifyRoot, R.id.notifySwitch);
+        notifySwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                mNotify = isChecked;
+                if (mService != null && mRWNCharacteristic != null) {
+                    Logger.e(TAG, "notify>>>>" + notifySwitch.isChecked());
+                    mService.setCharacteristicNotification(mRWNCharacteristic,
+                                                           notifySwitch.isChecked());
+                }
+            }
+        });
+        menu.findItem(R.id.action_notify).setActionView(notifyRoot);
+    }
+
+    @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        inflater.inflate(R.menu.ble_control, menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.action_clear:
+                mOutput.setText("");
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
+        }
+    }
+
+
+    private void startConnecting() {
+        if (mService != null) {
+            Logger.e(TAG, "start connecting");
+            mService.connect(mDevice.getAddress());
+            showPostLoading();
+        }
     }
 
     private void displayGattServices(List<BluetoothGattService> gattServices) {
@@ -114,13 +200,17 @@ public class BleControlFragment extends AppFragment {
 
         if (notifyCharacteristic != null) {
             Logger.e(TAG, "setNotifyCharacteristic==>" + notifyCharacteristic.getUuid().toString());
+            mRWNCharacteristic = notifyCharacteristic;
             mService.setCharacteristicNotification(notifyCharacteristic, true);
+        } else {
+            Msgs.shortToast(getContext(), "无服务");
         }
+
     }
 
     private void displayData(String data) {
         Logger.e(TAG, data + "\n");
-        mOutput.getEditableText().insert(0, data + "\n");
+        mOutput.getEditableText().insert(0, data + "\n\n");
     }
 
     private static IntentFilter makeGattUpdateIntentFilter() {
@@ -143,12 +233,24 @@ public class BleControlFragment extends AppFragment {
             final String action = intent.getAction();
             if (BleService.ACTION_GATT_CONNECTED.equals(action)) {
                 Msgs.shortToast(getContext(), "连接成功");
+                dismissPostLoading();
             } else if (BleService.ACTION_GATT_DISCONNECTED.equals(action)) {
                 Msgs.shortToast(getContext(), "已断开连接");
+                dismissPostLoading();
             } else if (BleService.ACTION_GATT_SERVICES_DISCOVERED.equals(action)) {
                 // Show all the supported services and characteristics on the user interface.
                 displayGattServices(mService.getSupportedGattServices());
             } else if (BleService.ACTION_DATA_AVAILABLE.equals(action)) {
+                int eventType = intent.getIntExtra(BleService.EXTRA_EVENT_TYPE, -1);
+                if (eventType != -1) {
+                    if (eventType == BleService.WRITE) {
+                        mService.readCharacteristic(mRWNCharacteristic);
+                    } else if (eventType == BleService.READ) {
+                        if (mNotify) {
+                            mService.setCharacteristicNotification(mRWNCharacteristic, true);
+                        }
+                    }
+                }
                 displayData(intent.getStringExtra(BleService.EXTRA_DATA));
             }
         }
@@ -163,7 +265,7 @@ public class BleControlFragment extends AppFragment {
                 Msgs.shortToast(getContext(), "无法初始化蓝牙!");
                 getActivity().finish();
             }
-            mService.connect(mDevice.getAddress());
+            startConnecting();
         }
 
         @Override

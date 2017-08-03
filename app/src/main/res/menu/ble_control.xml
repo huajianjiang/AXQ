@@ -4,9 +4,15 @@
       xmlns:tools="http://schemas.android.com/tools">
 
     <item
-        android:id="@+id/progress"
+        android:id="@+id/action_notify"
         android:actionLayout="@layout/menu_ble_control"
-        app:showAsAction="ifRoom"
-        android:title="通知切换"/>
+        android:title="通知切换"
+        app:showAsAction="ifRoom"/>
+
+    <item
+        android:id="@+id/action_clear"
+        android:title="清空"
+        app:showAsAction="ifRoom|withText"
+        />
 
 </menu>
