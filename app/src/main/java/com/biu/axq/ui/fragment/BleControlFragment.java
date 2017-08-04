@@ -95,21 +95,13 @@ public class BleControlFragment extends AppFragment {
             Msgs.shortToast(getContext(), "请先输入 HEX 指令");
             return;
         }
-
         if (mService != null && mRWNCharacteristic != null) {
-
-            //先禁用通知，防止返回的数据混乱写入命令后的返回的结果
-            mService.setCharacteristicNotification(mRWNCharacteristic, false);
-
             //发送 HEX 指令，异步的写入成功回调后立刻读取
             byte[] value = Utils.hexStringToBytes(command);
             if (value != null) {
-                if (!mService.writeCharacteristic(mRWNCharacteristic, value)) {
-                    Msgs.shortToast(getContext(), "写入初始化错误");
-                    if (mNotify) {
-                        mService.setCharacteristicNotification(mRWNCharacteristic, true);
-                    }
-                }
+                //先禁用通知，防止返回的数据混乱写入命令后的返回的结果
+                mService.setCharacteristicNotification(mRWNCharacteristic, false);
+                mService.writeCharacteristic(mRWNCharacteristic, value);
             } else {
                 Msgs.shortToast(getContext(), "输入格式错误，请输入 HEX 命令格式");
             }
@@ -205,12 +197,24 @@ public class BleControlFragment extends AppFragment {
         } else {
             Msgs.shortToast(getContext(), "无服务");
         }
-
     }
 
-    private void displayData(String data) {
-        Logger.e(TAG, data + "\n");
-        mOutput.getEditableText().insert(0, data + "\n\n");
+    private void displayData(int type, String data) {
+        String prefix = "";
+        if (type != -1) {
+            switch (type) {
+                case BleService.READ:
+                    prefix = "Read: ";
+                    break;
+                case BleService.WRITE:
+                    prefix = "Write: ";
+                    break;
+                case BleService.NOTIFY:
+                    prefix = "Notify: ";
+                    break;
+            }
+        }
+        mOutput.getEditableText().insert(0, prefix + data + "\n\n");
     }
 
     private static IntentFilter makeGattUpdateIntentFilter() {
@@ -219,6 +223,7 @@ public class BleControlFragment extends AppFragment {
         intentFilter.addAction(BleService.ACTION_GATT_DISCONNECTED);
         intentFilter.addAction(BleService.ACTION_GATT_SERVICES_DISCOVERED);
         intentFilter.addAction(BleService.ACTION_DATA_AVAILABLE);
+        intentFilter.addAction(BleService.ACTION_COMMAND_STATE);
         return intentFilter;
     }
 
@@ -242,16 +247,34 @@ public class BleControlFragment extends AppFragment {
                 displayGattServices(mService.getSupportedGattServices());
             } else if (BleService.ACTION_DATA_AVAILABLE.equals(action)) {
                 int eventType = intent.getIntExtra(BleService.EXTRA_EVENT_TYPE, -1);
-                if (eventType != -1) {
-                    if (eventType == BleService.WRITE) {
+                displayData(eventType, intent.getStringExtra(BleService.EXTRA_DATA));
+
+            } else if (BleService.ACTION_COMMAND_STATE.equals(action)) {
+                int eventType = intent.getIntExtra(BleService.EXTRA_EVENT_TYPE, -1);
+                boolean successful = intent.getBooleanExtra(BleService.EXTRA_COMMAND_STATE, false);
+                if (eventType == BleService.WRITE) {
+                    if (successful) {
                         mService.readCharacteristic(mRWNCharacteristic);
-                    } else if (eventType == BleService.READ) {
+                    } else {
+                        Msgs.shortToast(getContext(), "写入失败");
                         if (mNotify) {
+                            Logger.i(TAG, "-------------ResumeNotify-------------");
                             mService.setCharacteristicNotification(mRWNCharacteristic, true);
                         }
                     }
+                } else if (eventType == BleService.READ) {
+                    if (!successful) {
+                        Msgs.shortToast(getContext(), "读取失败");
+                    }
+                    if (mNotify) {
+                        Logger.i(TAG, "-------------ResumeNotify-------------");
+                        mService.setCharacteristicNotification(mRWNCharacteristic, true);
+                    }
+                } else if (eventType == BleService.NOTIFY) {
+                    if (!successful) {
+                        Msgs.shortToast(getContext(), "通知失败");
+                    }
                 }
-                displayData(intent.getStringExtra(BleService.EXTRA_DATA));
             }
         }
     };

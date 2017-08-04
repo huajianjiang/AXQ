@@ -101,6 +101,9 @@ public class BleScanFragment extends AppFragment implements BaseAdapter.OnItemCl
 
     @Override
     public void onItemClick(RecyclerView parent, View view) {
+
+        toggleScan(false);
+
         int pos = parent.getChildAdapterPosition(parent.findContainingItemView(view));
         BluetoothDevice device = mAdapter.getItem(pos);
 
