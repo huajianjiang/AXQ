@@ -1,6 +1,7 @@
 package com.biu.axq.ui.fragment;
 
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattService;
 import android.content.BroadcastReceiver;
@@ -10,7 +11,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -24,6 +27,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import com.biu.axq.R;
+import com.biu.axq.data.BleDevice;
 import com.biu.axq.service.BleService;
 import com.biu.axq.util.Constants;
 import com.biu.axq.util.Logger;
@@ -46,7 +50,7 @@ public class BleControlFragment extends AppFragment {
     private TextView mInput;
 
     private BleService mService;
-    private BluetoothDevice mDevice;
+    private BleDevice mDevice;
     private BluetoothGattCharacteristic mRWNCharacteristic;
 
     private boolean mNotify = true;
@@ -55,11 +59,7 @@ public class BleControlFragment extends AppFragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
-
-        mDevice = getArguments().getParcelable(Constants.KEY_ENTITY);
-
-        Intent gattServiceIntent = new Intent(getContext(), BleService.class);
-        getContext().bindService(gattServiceIntent, mServiceConnection, BIND_AUTO_CREATE);
+        mDevice = (BleDevice) getArguments().getSerializable(Constants.KEY_ENTITY);
     }
 
     @Override
@@ -83,7 +83,6 @@ public class BleControlFragment extends AppFragment {
             case R.id.tv_write:
                 writeCharacteristic();
                 break;
-
             default:
                 break;
         }
@@ -95,44 +94,47 @@ public class BleControlFragment extends AppFragment {
             Msgs.shortToast(getContext(), "请先输入 HEX 指令");
             return;
         }
-        if (mService != null && mRWNCharacteristic != null) {
-            //发送 HEX 指令，异步的写入成功回调后立刻读取
-            byte[] value = Utils.hexStringToBytes(command);
-            if (value != null) {
-                //先禁用通知，防止返回的数据混乱写入命令后的返回的结果
-                mService.setCharacteristicNotification(mRWNCharacteristic, false);
-                mService.writeCharacteristic(mRWNCharacteristic, value);
-            } else {
-                Msgs.shortToast(getContext(), "输入格式错误，请输入 HEX 命令格式");
-            }
+
+        if (mNotify) {
+            mService.setCharacteristicNotification(mRWNCharacteristic, false);
+        }
+
+        if (!mService.writeCharacteristic(mRWNCharacteristic, Utils.hexStringToBytes(command))) {
+            resumeNotifyIfNeed();
         }
     }
 
+
     @Override
-    public void onResume() {
-        super.onResume();
-        getContext().registerReceiver(mGattUpdateReceiver, makeGattUpdateIntentFilter());
+    protected void onFirstShow() {
+        mService = new BleService(new BleHandler(), getContext());
+        if (!mService.init()) {
+            Msgs.shortToast(getContext(), "无法初始化蓝牙!");
+            getActivity().finish();
+        }
+        startConnecting();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        getContext().unregisterReceiver(mGattUpdateReceiver);
+        stopConnecting();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        getContext().unbindService(mServiceConnection);
+        mService.close();
         mService = null;
     }
-
 
     @Override
     public void onPrepareOptionsMenu(Menu menu) {
         View notifyRoot =
                 getActivity().getLayoutInflater().inflate(R.layout.menu_ble_control, null);
         final Switch notifySwitch = Views.find(notifyRoot, R.id.notifySwitch);
+        notifySwitch.setChecked(mNotify);
+
         notifySwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
@@ -167,8 +169,16 @@ public class BleControlFragment extends AppFragment {
     private void startConnecting() {
         if (mService != null) {
             Logger.e(TAG, "start connecting");
-            mService.connect(mDevice.getAddress());
+            mService.connect(mDevice.address);
             showPostLoading();
+        }
+    }
+
+    private void stopConnecting() {
+        if (mService != null) {
+            Logger.e(TAG, "stop connecting");
+            mService.disconnect();
+            dismissPostLoading();
         }
     }
 
@@ -217,85 +227,82 @@ public class BleControlFragment extends AppFragment {
         mOutput.getEditableText().insert(0, prefix + data + "\n\n");
     }
 
-    private static IntentFilter makeGattUpdateIntentFilter() {
-        final IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(BleService.ACTION_GATT_CONNECTED);
-        intentFilter.addAction(BleService.ACTION_GATT_DISCONNECTED);
-        intentFilter.addAction(BleService.ACTION_GATT_SERVICES_DISCOVERED);
-        intentFilter.addAction(BleService.ACTION_DATA_AVAILABLE);
-        intentFilter.addAction(BleService.ACTION_COMMAND_STATE);
-        return intentFilter;
+
+    private void resumeNotifyIfNeed() {
+        if (mNotify) {
+            Logger.i(TAG, "-------------ResumeNotify-------------");
+            mService.setCharacteristicNotification(mRWNCharacteristic, true);
+        }
     }
 
-    // ACTION_GATT_CONNECTED: connected to a GATT server.
-    // ACTION_GATT_DISCONNECTED: disconnected from a GATT server.
-    // ACTION_GATT_SERVICES_DISCOVERED: discovered GATT services.
-    // ACTION_DATA_AVAILABLE: received data from the device.  This can be a result of read
-    //                        or notification operations.
-    private final BroadcastReceiver mGattUpdateReceiver = new BroadcastReceiver() {
+    private class BleHandler extends Handler {
         @Override
-        public void onReceive(Context context, Intent intent) {
-            final String action = intent.getAction();
-            if (BleService.ACTION_GATT_CONNECTED.equals(action)) {
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case BleService.MSG_ON_GATT_CONNECTION_STATE_CHANGED:
+                    onGattConnectionStateChanged(msg.arg1);
+                    break;
+                case BleService.MSG_ON_GATT_SERVICES_DISCOVERED:
+                    onGattServicesDiscovered();
+                    break;
+                case BleService.MSG_ON_CHARACTERISTIC_RESULT_AVAILABLE:
+                    onCharacteristicResultAvailable(msg.arg1, msg.arg2, msg.obj);
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    private void onCharacteristicResultAvailable(int type, int status, Object data) {
+        final boolean successful = status == BluetoothGatt.GATT_SUCCESS;
+        if (successful) {
+            displayData(type, (String) data);
+            if (type == BleService.WRITE) {
+                mService.readCharacteristic(mRWNCharacteristic);
+            } else if (type == BleService.READ) {
+                resumeNotifyIfNeed();
+            }
+        } else {
+            String typeStr = "";
+            switch (type) {
+                case BleService.READ:
+                    typeStr = "READ";
+                    resumeNotifyIfNeed();
+                    break;
+                case BleService.WRITE:
+                    typeStr = "WRITE";
+                    resumeNotifyIfNeed();
+                    break;
+                case BleService.NOTIFY:
+                    typeStr = "NOTIFY";
+                    break;
+            }
+            Logger.w(TAG, "Command exe failed>>>>" + typeStr);
+            Msgs.shortToast(getContext(), typeStr + "失败");
+        }
+    }
+
+    private void onGattServicesDiscovered() {
+        displayGattServices(mService.getSupportedGattServices());
+    }
+
+    private void onGattConnectionStateChanged(int status) {
+        switch (status) {
+            case BleService.STATE_CONNECTING:
+                break;
+            case BleService.STATE_CONNECTED:
                 Msgs.shortToast(getContext(), "连接成功");
                 dismissPostLoading();
-            } else if (BleService.ACTION_GATT_DISCONNECTED.equals(action)) {
+                break;
+            case BleService.STATE_DISCONNECTING:
+                break;
+            case BleService.STATE_DISCONNECTED:
                 Msgs.shortToast(getContext(), "已断开连接");
                 dismissPostLoading();
-            } else if (BleService.ACTION_GATT_SERVICES_DISCOVERED.equals(action)) {
-                // Show all the supported services and characteristics on the user interface.
-                displayGattServices(mService.getSupportedGattServices());
-            } else if (BleService.ACTION_DATA_AVAILABLE.equals(action)) {
-                int eventType = intent.getIntExtra(BleService.EXTRA_EVENT_TYPE, -1);
-                displayData(eventType, intent.getStringExtra(BleService.EXTRA_DATA));
-
-            } else if (BleService.ACTION_COMMAND_STATE.equals(action)) {
-                int eventType = intent.getIntExtra(BleService.EXTRA_EVENT_TYPE, -1);
-                boolean successful = intent.getBooleanExtra(BleService.EXTRA_COMMAND_STATE, false);
-                if (eventType == BleService.WRITE) {
-                    if (successful) {
-                        mService.readCharacteristic(mRWNCharacteristic);
-                    } else {
-                        Msgs.shortToast(getContext(), "写入失败");
-                        if (mNotify) {
-                            Logger.i(TAG, "-------------ResumeNotify-------------");
-                            mService.setCharacteristicNotification(mRWNCharacteristic, true);
-                        }
-                    }
-                } else if (eventType == BleService.READ) {
-                    if (!successful) {
-                        Msgs.shortToast(getContext(), "读取失败");
-                    }
-                    if (mNotify) {
-                        Logger.i(TAG, "-------------ResumeNotify-------------");
-                        mService.setCharacteristicNotification(mRWNCharacteristic, true);
-                    }
-                } else if (eventType == BleService.NOTIFY) {
-                    if (!successful) {
-                        Msgs.shortToast(getContext(), "通知失败");
-                    }
-                }
-            }
+                break;
         }
-    };
-
-    private ServiceConnection mServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            Logger.e(TAG, "onServiceConnected");
-            mService = ((BleService.BleBinder) service).getService();
-            if (!mService.init()) {
-                Msgs.shortToast(getContext(), "无法初始化蓝牙!");
-                getActivity().finish();
-            }
-            startConnecting();
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            mService = null;
-        }
-    };
+    }
 
 
 }

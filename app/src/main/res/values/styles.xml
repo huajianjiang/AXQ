@@ -14,6 +14,9 @@
         <item name="android:editTextStyle">@style/AppEditTextStyle</item>
         <item name="colorControlHighlight">@color/colorControlHighlight</item>
 
+        <item name="android:contextPopupMenuStyle"></item>
+        <item name="android:popupMenuStyle">@null</item>
+
     </style>
 
     <style name="AppTheme.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar"/>

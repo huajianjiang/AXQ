@@ -21,6 +21,7 @@ import android.widget.Toast;
 
 import com.biu.axq.R;
 import com.biu.axq.adapter.BleAdapter;
+import com.biu.axq.data.BleDevice;
 import com.biu.axq.ui.activity.BleControlActivity;
 import com.biu.axq.util.Constants;
 import com.biu.axq.util.Logger;
@@ -87,6 +88,7 @@ public class BleScanFragment extends AppFragment implements BaseAdapter.OnItemCl
         mAdapter.clickTargets(R.id.itemView).listenClickEvent(this);
     }
 
+
     @Override
     public void onResume() {
         super.onResume();
@@ -106,10 +108,12 @@ public class BleScanFragment extends AppFragment implements BaseAdapter.OnItemCl
 
         int pos = parent.getChildAdapterPosition(parent.findContainingItemView(view));
         BluetoothDevice device = mAdapter.getItem(pos);
-
+        BleDevice bleDevice = new BleDevice();
+        bleDevice.address = device.getAddress();
         Intent controlIntent = new Intent(getContext(), BleControlActivity.class);
-        controlIntent.putExtra(Constants.KEY_ENTITY, device);
+        controlIntent.putExtra(Constants.KEY_ENTITY, bleDevice);
         startActivity(controlIntent);
+
     }
 
     @Override

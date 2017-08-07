@@ -8,6 +8,7 @@ package com.biu.axq.util;
 public interface Constants {
 
     String KEY_ENTITY = "entity";
+    String KEY_MAC = "MAC";
 
     int RQ_PERM_LOCATION = 1;
 
