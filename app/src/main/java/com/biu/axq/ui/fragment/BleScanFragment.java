@@ -29,6 +29,7 @@ import com.biu.axq.util.Msgs;
 import com.biu.axq.util.Utils;
 import com.biu.axq.util.Views;
 import com.github.huajianjiang.baserecyclerview.widget.BaseAdapter;
+import com.github.huajianjiang.expandablerecyclerview.widget.PatchedRecyclerView;
 
 import java.util.concurrent.TimeUnit;
 
@@ -49,13 +50,16 @@ import static com.biu.axq.util.Constants.RQ_ENABLE_BT;
 public class BleScanFragment extends AppFragment implements BaseAdapter.OnItemClickListener {
     private static final String TAG = BleScanFragment.class.getSimpleName();
     private SwipeRefreshLayout mRefreshLayout;
-    private RecyclerView mRv;
+    private PatchedRecyclerView mRv;
     private BleAdapter mAdapter;
     private BluetoothAdapter mBtAdapter;
 
     private Disposable mDelayTask;
 
     private boolean mScanning;
+
+    private View mLoadingView;
+    private View mEmptyView;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -85,6 +89,12 @@ public class BleScanFragment extends AppFragment implements BaseAdapter.OnItemCl
         mRv.setAdapter(mAdapter);
         mRv.addItemDecoration(
                 new DividerItemDecoration(getContext(), DividerItemDecoration.VERTICAL));
+
+        mLoadingView = Views.find(root, R.id.loadingBar);
+        mEmptyView = Views.find(root, R.id.empty);
+
+        mRv.setEmptyView(mLoadingView);
+
         mAdapter.clickTargets(R.id.itemView).listenClickEvent(this);
     }
 
@@ -174,6 +184,7 @@ public class BleScanFragment extends AppFragment implements BaseAdapter.OnItemCl
     private void startScanning() {
         stopScanning();
 
+        mRv.setEmptyView(mLoadingView);
         mAdapter.invalidate(null);
 
         mScanning = true;
@@ -186,6 +197,10 @@ public class BleScanFragment extends AppFragment implements BaseAdapter.OnItemCl
                                    public void accept(@NonNull Long aLong) throws Exception {
                                        mBtAdapter.stopLeScan(mScanCallback);
                                        mScanning = false;
+                                       if (mAdapter.isEmpty()) {
+                                           Logger.e(TAG, "scan result nothing");
+                                           mRv.setEmptyView(mEmptyView);
+                                       }
                                        getActivity().invalidateOptionsMenu();
                                        Logger.e(TAG, "stop scanning");
                                    }
@@ -199,6 +214,7 @@ public class BleScanFragment extends AppFragment implements BaseAdapter.OnItemCl
         mBtAdapter.stopLeScan(mScanCallback);
         if (mDelayTask != null) {
             mDelayTask.dispose();
+            mDelayTask = null;
         }
         mScanning = false;
         getActivity().invalidateOptionsMenu();
@@ -207,6 +223,7 @@ public class BleScanFragment extends AppFragment implements BaseAdapter.OnItemCl
     private BluetoothAdapter.LeScanCallback mScanCallback = new BluetoothAdapter.LeScanCallback() {
         @Override
         public void onLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
+            Logger.e(TAG, "onLeScan>>>" + device.getName());
             mAdapter.insert(device);
         }
     };

@@ -1,7 +1,7 @@
 <resources>
 
     <!-- Base application theme. -->
-    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="AppBaseTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
@@ -14,10 +14,11 @@
         <item name="android:editTextStyle">@style/AppEditTextStyle</item>
         <item name="colorControlHighlight">@color/colorControlHighlight</item>
 
-        <item name="android:contextPopupMenuStyle"></item>
-        <item name="android:popupMenuStyle">@null</item>
-
     </style>
+
+<style name="AppTheme" parent="AppBaseTheme">
+
+</style>
 
     <style name="AppTheme.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar"/>
 

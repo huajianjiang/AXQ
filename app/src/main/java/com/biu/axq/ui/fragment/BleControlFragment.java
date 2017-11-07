@@ -124,14 +124,17 @@ public class BleControlFragment extends AppFragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        mService.close();
-        mService = null;
+        if (mService != null) {
+            mService.close();
+            mService = null;
+        }
     }
 
     @Override
     public void onPrepareOptionsMenu(Menu menu) {
         View notifyRoot =
                 getActivity().getLayoutInflater().inflate(R.layout.menu_ble_control, null);
+
         final Switch notifySwitch = Views.find(notifyRoot, R.id.notifySwitch);
         notifySwitch.setChecked(mNotify);
 
